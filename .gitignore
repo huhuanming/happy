@@ -1,5 +1,9 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
+# Local dev scripts
+start.sh
+stop.sh
+
 # dependencies
 node_modules/
 
@@ -62,3 +66,4 @@ progress*.txt
 
 # OpenCode trace output (script is committed, output is not)
 docs/competition/opencode/traces/
+packages/happy-server/.env.dev
