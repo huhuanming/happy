@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import { Fastify } from '../types';
+import { runMaintenance } from '@/app/monitoring/dbMaintenance';
 
 export function devRoutes(app: Fastify) {
+
+    // Database maintenance endpoint
+    app.post('/v1/admin/db-maintenance', async (request, reply) => {
+        const result = await runMaintenance();
+        return reply.send(result);
+    });
 
     // Combined logging endpoint (only when explicitly enabled)
     if (process.env.DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING) {
