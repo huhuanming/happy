@@ -6,6 +6,7 @@ import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { allocateUserSeq } from "@/storage/seq";
 import { log } from "@/utils/log";
 import * as privacyKit from "privacy-kit";
+import { userDataCache } from "@/storage/userDataCache";
 
 export function artifactsRoutes(app: Fastify) {
     // GET /v1/artifacts - List all artifacts for the account
@@ -31,6 +32,9 @@ export function artifactsRoutes(app: Fastify) {
         const userId = request.userId;
 
         try {
+            const cached = userDataCache.get<any>('artifacts', userId);
+            if (cached) return reply.send(cached);
+
             const artifacts = await db.artifact.findMany({
                 where: { accountId: userId },
                 orderBy: { updatedAt: 'desc' },
@@ -45,7 +49,7 @@ export function artifactsRoutes(app: Fastify) {
                 }
             });
 
-            return reply.send(artifacts.map(a => ({
+            const response = artifacts.map(a => ({
                 id: a.id,
                 header: privacyKit.encodeBase64(a.header),
                 headerVersion: a.headerVersion,
@@ -53,7 +57,9 @@ export function artifactsRoutes(app: Fastify) {
                 seq: a.seq,
                 createdAt: a.createdAt.getTime(),
                 updatedAt: a.updatedAt.getTime()
-            })));
+            }));
+            userDataCache.set('artifacts', userId, response);
+            return reply.send(response);
         } catch (error) {
             log({ module: 'api', level: 'error' }, `Failed to get artifacts: ${error}`);
             return reply.code(500).send({ error: 'Failed to get artifacts' });
@@ -206,6 +212,7 @@ export function artifactsRoutes(app: Fastify) {
                 payload: newArtifactPayload,
                 recipientFilter: { type: 'user-scoped-only' }
             });
+            userDataCache.invalidate('artifacts', userId);
 
             return reply.send({
                 id: artifact.id,
@@ -343,6 +350,7 @@ export function artifactsRoutes(app: Fastify) {
                 payload: updatePayload,
                 recipientFilter: { type: 'user-scoped-only' }
             });
+            userDataCache.invalidate('artifacts', userId);
 
             return reply.send({
                 success: true,
@@ -404,6 +412,7 @@ export function artifactsRoutes(app: Fastify) {
                 payload: deletePayload,
                 recipientFilter: { type: 'user-scoped-only' }
             });
+            userDataCache.invalidate('artifacts', userId);
 
             return reply.send({ success: true });
         } catch (error) {
