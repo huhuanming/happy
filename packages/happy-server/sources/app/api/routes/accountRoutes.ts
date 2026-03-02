@@ -13,17 +13,20 @@ export function accountRoutes(app: Fastify) {
         preHandler: app.authenticate,
     }, async (request, reply) => {
         const userId = request.userId;
-        const user = await db.account.findUniqueOrThrow({
-            where: { id: userId },
-            select: {
-                firstName: true,
-                lastName: true,
-                username: true,
-                avatar: true,
-                githubUser: true
-            }
-        });
-        const connectedVendors = new Set((await db.serviceAccountToken.findMany({ where: { accountId: userId } })).map(t => t.vendor));
+        const [user, serviceTokens] = await Promise.all([
+            db.account.findUniqueOrThrow({
+                where: { id: userId },
+                select: {
+                    firstName: true,
+                    lastName: true,
+                    username: true,
+                    avatar: true,
+                    githubUser: true
+                }
+            }),
+            db.serviceAccountToken.findMany({ where: { accountId: userId }, select: { vendor: true } })
+        ]);
+        const connectedVendors = new Set(serviceTokens.map(t => t.vendor));
         return reply.send({
             id: userId,
             timestamp: Date.now(),
@@ -99,30 +102,8 @@ export function accountRoutes(app: Fastify) {
         const { settings, expectedVersion } = request.body;
 
         try {
-            // Get current user data for version check
-            const currentUser = await db.account.findUnique({
-                where: { id: userId },
-                select: { settings: true, settingsVersion: true }
-            });
-
-            if (!currentUser) {
-                return reply.code(500).send({
-                    success: false,
-                    error: 'Failed to update account settings'
-                });
-            }
-
-            // Check current version
-            if (currentUser.settingsVersion !== expectedVersion) {
-                return reply.code(200).send({
-                    success: false,
-                    error: 'version-mismatch',
-                    currentVersion: currentUser.settingsVersion,
-                    currentSettings: currentUser.settings
-                });
-            }
-
-            // Update settings with version check
+            // Try the update directly (saves one DB round-trip on the happy path).
+            // The where clause enforces both ownership and version check atomically.
             const { count } = await db.account.updateMany({
                 where: {
                     id: userId,
@@ -136,15 +117,22 @@ export function accountRoutes(app: Fastify) {
             });
 
             if (count === 0) {
-                // Re-fetch to get current version
+                // Either user not found or version mismatch — fetch to distinguish
                 const account = await db.account.findUnique({
-                    where: { id: userId }
+                    where: { id: userId },
+                    select: { settings: true, settingsVersion: true }
                 });
+                if (!account) {
+                    return reply.code(500).send({
+                        success: false,
+                        error: 'Failed to update account settings'
+                    });
+                }
                 return reply.code(200).send({
                     success: false,
                     error: 'version-mismatch',
-                    currentVersion: account?.settingsVersion || 0,
-                    currentSettings: account?.settings || null
+                    currentVersion: account.settingsVersion,
+                    currentSettings: account.settings
                 });
             }
 
