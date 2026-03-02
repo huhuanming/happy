@@ -4,6 +4,7 @@ import { FeedBodySchema } from "@/app/feed/types";
 import { feedGet } from "@/app/feed/feedGet";
 import { Context } from "@/context";
 import { db } from "@/storage/db";
+import { userDataCache } from "@/storage/userDataCache";
 
 export function feedRoutes(app: Fastify) {
     app.get('/v1/feed', {
@@ -28,13 +29,24 @@ export function feedRoutes(app: Fastify) {
             }
         }
     }, async (request, reply) => {
-        const items = await feedGet(db, Context.create(request.userId), {
-            cursor: {
-                before: request.query?.before,
-                after: request.query?.after
-            },
+        const userId = request.userId;
+        const { before, after } = request.query ?? {};
+
+        // Only cache the default (no-cursor) initial load
+        if (!before && !after) {
+            const cached = userDataCache.get<any>('feed', userId);
+            if (cached) return reply.send(cached);
+        }
+
+        const items = await feedGet(db, Context.create(userId), {
+            cursor: { before, after },
             limit: request.query?.limit
         });
-        return reply.send({ items: items.items, hasMore: items.hasMore });
+        const response = { items: items.items, hasMore: items.hasMore };
+
+        if (!before && !after) {
+            userDataCache.set('feed', userId, response);
+        }
+        return reply.send(response);
     });
 }

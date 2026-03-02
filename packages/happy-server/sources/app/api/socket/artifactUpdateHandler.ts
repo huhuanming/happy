@@ -6,6 +6,7 @@ import { log } from "@/utils/log";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { Socket } from "socket.io";
 import * as privacyKit from "privacy-kit";
+import { userDataCache } from "@/storage/userDataCache";
 
 export function artifactUpdateHandler(userId: string, socket: Socket) {
     // Read artifact with full body
@@ -226,6 +227,7 @@ export function artifactUpdateHandler(userId: string, socket: Socket) {
                 payload: updatePayload,
                 recipientFilter: { type: 'user-scoped-only' }
             });
+            userDataCache.invalidate('artifacts', userId);
 
             // Send success response
             const response: any = { result: 'success' };
@@ -326,6 +328,7 @@ export function artifactUpdateHandler(userId: string, socket: Socket) {
                 payload: newArtifactPayload,
                 recipientFilter: { type: 'user-scoped-only' }
             });
+            userDataCache.invalidate('artifacts', userId);
 
             // Return created artifact
             callback({
@@ -394,6 +397,7 @@ export function artifactUpdateHandler(userId: string, socket: Socket) {
                 payload: deletePayload,
                 recipientFilter: { type: 'user-scoped-only' }
             });
+            userDataCache.invalidate('artifacts', userId);
 
             // Send success response
             callback({ result: 'success' });
