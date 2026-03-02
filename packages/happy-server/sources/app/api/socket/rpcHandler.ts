@@ -81,7 +81,23 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
 
             const targetSocket = rpcListeners.get(method);
             if (!targetSocket || !targetSocket.connected) {
-                // log({ module: 'websocket-rpc' }, `RPC call failed: Method ${method} not available (disconnected or not registered)`);
+                // If killSession and process is gone, archive the session directly
+                if (method.endsWith(':killSession')) {
+                    const sessionId = method.split(':')[0];
+                    if (sessionId) {
+                        try {
+                            await db.session.update({
+                                where: { id: sessionId },
+                                data: { archived: true, active: false }
+                            });
+                            log({ module: 'websocket-rpc', sessionId }, `Session archived directly (process not connected)`);
+                        } catch (e) {
+                            log({ module: 'websocket-rpc', sessionId, level: 'error' }, `Failed to archive session directly: ${e}`);
+                        }
+                    }
+                    if (callback) callback({ ok: true, result: {} });
+                    return;
+                }
                 if (callback) {
                     callback({
                         ok: false,
