@@ -25,9 +25,6 @@
     },
     "workspaces": {
         "packages": [
-            "packages/happy-app",
-            "packages/happy-agent",
-            "packages/happy-cli",
             "packages/happy-server",
             "packages/happy-wire",
             "packages/happy-app-logs"
