@@ -196,6 +196,21 @@ export function sessionRoutes(app: Fastify) {
             nextCursor = `cursor_v1_${lastSession.id}`;
         }
 
+        // When changedSince is provided, also return sessions archived since then
+        // so the client knows to remove them from its local list
+        let deletedSessionIds: string[] = [];
+        if (changedSince) {
+            const recentlyArchived = await db.session.findMany({
+                where: {
+                    accountId: userId,
+                    archived: true,
+                    updatedAt: { gt: new Date(changedSince) }
+                },
+                select: { id: true }
+            });
+            deletedSessionIds = recentlyArchived.map(s => s.id);
+        }
+
         return reply.send({
             sessions: resultSessions.map((v) => ({
                 id: v.id,
@@ -210,6 +225,7 @@ export function sessionRoutes(app: Fastify) {
                 agentStateVersion: v.agentStateVersion,
                 dataEncryptionKey: v.dataEncryptionKey ? Buffer.from(v.dataEncryptionKey).toString('base64') : null,
             })),
+            deletedSessionIds,
             nextCursor,
             hasNext
         });

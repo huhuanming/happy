@@ -43,12 +43,11 @@ export async function startMetricsServer(): Promise<void> {
 
     const port = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT, 10) : 9090;
     const app = await createMetricsServer();
-    
+
     try {
         await app.listen({ port, host: '0.0.0.0' });
         log({ module: 'metrics' }, `Metrics server listening on port ${port}`);
     } catch (error) {
-        log({ module: 'metrics', level: 'error' }, `Failed to start metrics server: ${error}`);
-        throw error;
+        log({ module: 'metrics', level: 'error' }, `Failed to start metrics server (non-fatal): ${error}`);
     }
 }

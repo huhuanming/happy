@@ -3,6 +3,9 @@ import { delay } from "@/utils/delay";
 import { forever } from "@/utils/forever";
 import { shutdownSignal } from "@/utils/shutdown";
 import { log } from "@/utils/log";
+import { eventRouter, buildDeleteSessionUpdate } from "@/app/events/eventRouter";
+import { allocateUserSeq } from "@/storage/seq";
+import { randomKeyNaked } from "@/utils/randomKeyNaked";
 
 /**
  * Archive stale session data by deleting messages from sessions
@@ -97,6 +100,15 @@ async function archiveStaleData() {
             { module: 'session-archive', sessionId: session.id, deletedCount: deletedInSession },
             `Archived session ${session.id} (${deletedInSession} messages deleted)`
         );
+
+        // Notify connected clients to remove the archived session
+        const updSeq = await allocateUserSeq(session.accountId);
+        const updatePayload = buildDeleteSessionUpdate(session.id, updSeq, randomKeyNaked(12));
+        eventRouter.emitUpdate({
+            userId: session.accountId,
+            payload: updatePayload,
+            recipientFilter: { type: 'user-scoped-only' }
+        });
     }
 
     // 3. Clean up expired auth requests (> 1 day old)
