@@ -45,9 +45,10 @@ async function archiveStaleData() {
     const cutoffDate = new Date(Date.now() - ARCHIVE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
     let totalMessagesDeleted = 0;
 
-    // 1. Find stale sessions
+    // 1. Find stale sessions (not yet archived)
     const staleSessions = await db.session.findMany({
         where: {
+            archived: false,
             lastActiveAt: { lte: cutoffDate }
         },
         select: { id: true, accountId: true }
@@ -86,12 +87,16 @@ async function archiveStaleData() {
             }
         }
 
-        if (deletedInSession > 0) {
-            log(
-                { module: 'session-archive', sessionId: session.id, deletedCount: deletedInSession },
-                `Archived ${deletedInSession} messages from session ${session.id}`
-            );
-        }
+        // Mark session as archived
+        await db.session.update({
+            where: { id: session.id },
+            data: { archived: true }
+        });
+
+        log(
+            { module: 'session-archive', sessionId: session.id, deletedCount: deletedInSession },
+            `Archived session ${session.id} (${deletedInSession} messages deleted)`
+        );
     }
 
     // 3. Clean up expired auth requests (> 1 day old)

@@ -102,6 +102,7 @@ model Session {
     dataEncryptionKey Bytes?
     seq               Int              @default(0)
     active            Boolean          @default(true)
+    archived          Boolean          @default(false)
     lastActiveAt      DateTime         @default(now())
     createdAt         DateTime         @default(now())
     updatedAt         DateTime         @updatedAt
@@ -111,6 +112,7 @@ model Session {
 
     @@unique([accountId, tag])
     @@index([accountId, updatedAt(sort: Desc)])
+    @@index([accountId, archived])
 }
 
 model SessionMessage {

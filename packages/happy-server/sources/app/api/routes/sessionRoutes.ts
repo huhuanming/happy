@@ -17,7 +17,7 @@ export function sessionRoutes(app: Fastify) {
         const userId = request.userId;
 
         const sessions = await db.session.findMany({
-            where: { accountId: userId },
+            where: { accountId: userId, archived: false },
             orderBy: { updatedAt: 'desc' },
             take: 150,
             select: {
@@ -146,8 +146,8 @@ export function sessionRoutes(app: Fastify) {
             }
         }
 
-        // Build where clause
-        const where: Prisma.SessionWhereInput = { accountId: userId };
+        // Build where clause - exclude archived sessions
+        const where: Prisma.SessionWhereInput = { accountId: userId, archived: false };
 
         // Add changedSince filter (just a filter, doesn't affect pagination)
         if (changedSince) {

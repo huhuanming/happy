@@ -1,6 +1,7 @@
 import { eventRouter } from "@/app/events/eventRouter";
 import { log } from "@/utils/log";
 import { Socket } from "socket.io";
+import { db } from "@/storage/db";
 
 export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<string, Socket>) {
     
@@ -115,6 +116,22 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
 
                 const duration = Date.now() - startTime;
                 // log({ module: 'websocket-rpc' }, `RPC call succeeded: ${method} (${duration}ms)`);
+
+                // Mark session as archived after successful killSession RPC
+                if (method.endsWith(':killSession')) {
+                    const sessionId = method.split(':')[0];
+                    if (sessionId) {
+                        try {
+                            await db.session.update({
+                                where: { id: sessionId },
+                                data: { archived: true, active: false }
+                            });
+                            log({ module: 'websocket-rpc', sessionId }, `Session archived via killSession`);
+                        } catch (e) {
+                            log({ module: 'websocket-rpc', sessionId, level: 'error' }, `Failed to archive session: ${e}`);
+                        }
+                    }
+                }
 
                 // Forward the response back to the caller via callback
                 if (callback) {
