@@ -4,7 +4,6 @@ import { allocateSessionSeqBatch, allocateUserSeq, allocateUserSeqBatch } from "
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { z } from "zod";
 import { type Fastify } from "../types";
-import { userDataCache } from "@/storage/userDataCache";
 
 const getMessagesQuerySchema = z.object({
     after_seq: z.coerce.number().int().min(0).default(0),
@@ -210,9 +209,6 @@ export function v3SessionRoutes(app: Fastify) {
             });
         }
 
-        if (txResult.createdMessages.length > 0) {
-            userDataCache.invalidate('sessions', userId);
-        }
         return reply.send({
             messages: txResult.responseMessages.map(toSendResponseMessage)
         });

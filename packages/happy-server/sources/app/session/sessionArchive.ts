@@ -6,7 +6,6 @@ import { log } from "@/utils/log";
 import { eventRouter, buildDeleteSessionUpdate } from "@/app/events/eventRouter";
 import { allocateUserSeq } from "@/storage/seq";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
-import { userDataCache } from "@/storage/userDataCache";
 
 /**
  * Archive stale session data by deleting messages from sessions
@@ -110,7 +109,6 @@ async function archiveStaleData() {
             payload: updatePayload,
             recipientFilter: { type: 'user-scoped-only' }
         });
-        userDataCache.invalidate('sessions', session.accountId);
     }
 
     // 3. Clean up expired auth requests (> 1 day old)

@@ -7,7 +7,6 @@ import { AsyncLock } from "@/utils/lock";
 import { log } from "@/utils/log";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { Socket } from "socket.io";
-import { userDataCache } from "@/storage/userDataCache";
 
 export function sessionUpdateHandler(userId: string, socket: Socket, connection: ClientConnection) {
     socket.on('update-metadata', async (data: any, callback: (response: any) => void) => {
@@ -52,7 +51,6 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
             });
 
             // Send success response with new version via callback
-            userDataCache.invalidate('sessions', userId);
             callback({ result: 'success', version: expectedVersion + 1, metadata: metadata });
         } catch (error) {
             log({ module: 'websocket', level: 'error' }, `Error in update-metadata: ${error}`);
@@ -106,7 +104,6 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
             });
 
             // Send success response with new version via callback
-            userDataCache.invalidate('sessions', userId);
             callback({ result: 'success', version: expectedVersion + 1, agentState: agentState });
         } catch (error) {
             log({ module: 'websocket', level: 'error' }, `Error in update-state: ${error}`);
@@ -223,7 +220,6 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                     recipientFilter: { type: 'all-interested-in-session', sessionId: sid },
                     skipSenderConnection: connection
                 });
-                userDataCache.invalidate('sessions', userId);
             } catch (error) {
                 log({ module: 'websocket', level: 'error' }, `Error in message handler: ${error}`);
             }

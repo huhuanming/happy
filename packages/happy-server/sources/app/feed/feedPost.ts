@@ -4,7 +4,6 @@ import { afterTx, Tx } from "@/storage/inTx";
 import { allocateUserSeq } from "@/storage/seq";
 import { eventRouter, buildNewFeedPostUpdate } from "@/app/events/eventRouter";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
-import { userDataCache } from "@/storage/userDataCache";
 
 /**
  * Add a post to user's feed.
@@ -54,7 +53,6 @@ export async function feedPost(
 
     // Emit socket event after transaction completes
     afterTx(tx, async () => {
-        userDataCache.invalidate('feed', ctx.uid);
         const updateSeq = await allocateUserSeq(ctx.uid);
         const updatePayload = buildNewFeedPostUpdate(result, updateSeq, randomKeyNaked(12));
 

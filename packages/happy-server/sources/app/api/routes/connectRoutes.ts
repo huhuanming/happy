@@ -8,7 +8,6 @@ import { githubConnect } from "@/app/github/githubConnect";
 import { githubDisconnect } from "@/app/github/githubDisconnect";
 import { Context } from "@/context";
 import { db } from "@/storage/db";
-import { userDataCache } from "@/storage/userDataCache";
 
 export function connectRoutes(app: Fastify) {
 
@@ -264,7 +263,6 @@ export function connectRoutes(app: Fastify) {
             update: { updatedAt: new Date(), token: encrypted },
             create: { accountId: userId, vendor: request.params.vendor, token: encrypted }
         });
-        userDataCache.invalidate('profile', userId);
         reply.send({ success: true });
     });
 
@@ -308,7 +306,6 @@ export function connectRoutes(app: Fastify) {
     }, async (request, reply) => {
         const userId = request.userId;
         await db.serviceAccountToken.delete({ where: { accountId_vendor: { accountId: userId, vendor: request.params.vendor } } });
-        userDataCache.invalidate('profile', userId);
         reply.send({ success: true });
     });
 

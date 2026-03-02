@@ -7,7 +7,6 @@ import { Context } from "@/context";
 import { friendRemove } from "@/app/social/friendRemove";
 import { friendList } from "@/app/social/friendList";
 import { buildUserProfile } from "@/app/social/type";
-import { userDataCache } from "@/storage/userDataCache";
 
 export async function userRoutes(app: Fastify) {
 
@@ -127,8 +126,6 @@ export async function userRoutes(app: Fastify) {
         preHandler: app.authenticate
     }, async (request, reply) => {
         const user = await friendAdd(Context.create(request.userId), request.body.uid);
-        userDataCache.invalidate('friends', request.userId);
-        userDataCache.invalidate('friends', request.body.uid);
         return reply.send({ user });
     });
 
@@ -149,8 +146,6 @@ export async function userRoutes(app: Fastify) {
         preHandler: app.authenticate
     }, async (request, reply) => {
         const user = await friendRemove(Context.create(request.userId), request.body.uid);
-        userDataCache.invalidate('friends', request.userId);
-        userDataCache.invalidate('friends', request.body.uid);
         return reply.send({ user });
     });
 
@@ -164,14 +159,8 @@ export async function userRoutes(app: Fastify) {
         },
         preHandler: app.authenticate
     }, async (request, reply) => {
-        const userId = request.userId;
-        const cached = userDataCache.get<any>('friends', userId);
-        if (cached) return reply.send(cached);
-
-        const friends = await friendList(Context.create(userId));
-        const response = { friends };
-        userDataCache.set('friends', userId, response);
-        return reply.send(response);
+        const friends = await friendList(Context.create(request.userId));
+        return reply.send({ friends });
     });
 };
 

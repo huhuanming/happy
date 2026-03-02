@@ -7,7 +7,6 @@ import { log } from "@/utils/log";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { allocateUserSeq } from "@/storage/seq";
 import { sessionDelete } from "@/app/session/sessionDelete";
-import { userDataCache } from "@/storage/userDataCache";
 
 export function sessionRoutes(app: Fastify) {
 
@@ -16,9 +15,6 @@ export function sessionRoutes(app: Fastify) {
         preHandler: app.authenticate,
     }, async (request, reply) => {
         const userId = request.userId;
-
-        const cached = userDataCache.get<object>('sessions', userId);
-        if (cached) return reply.send(cached);
 
         const sessions = await db.session.findMany({
             where: { accountId: userId, archived: false },
@@ -51,7 +47,7 @@ export function sessionRoutes(app: Fastify) {
             }
         });
 
-        const response = {
+        return reply.send({
             sessions: sessions.map((v) => {
                 const lastMsg = v.messages[0] ?? null;
                 return {
@@ -76,9 +72,7 @@ export function sessionRoutes(app: Fastify) {
                     } : null
                 };
             })
-        };
-        userDataCache.set('sessions', userId, response);
-        return reply.send(response);
+        });
     });
 
     // V2 Sessions API - Active sessions only
@@ -313,7 +307,6 @@ export function sessionRoutes(app: Fastify) {
                 recipientFilter: { type: 'user-scoped-only' }
             });
 
-            userDataCache.invalidate('sessions', userId);
             return reply.send({
                 session: {
                     id: session.id,
@@ -398,7 +391,6 @@ export function sessionRoutes(app: Fastify) {
             return reply.code(404).send({ error: 'Session not found or not owned by user' });
         }
 
-        userDataCache.invalidate('sessions', userId);
         return reply.send({ success: true });
     });
 }
