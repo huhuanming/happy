@@ -1,6 +1,6 @@
 import { buildNewMessageUpdate, eventRouter } from "@/app/events/eventRouter";
 import { db } from "@/storage/db";
-import { allocateSessionSeqBatch, allocateUserSeq } from "@/storage/seq";
+import { allocateSessionSeqBatch, allocateUserSeq, allocateUserSeqBatch } from "@/storage/seq";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { z } from "zod";
 import { type Fastify } from "../types";
@@ -61,34 +61,31 @@ export function v3SessionRoutes(app: Fastify) {
         const { sessionId } = request.params;
         const { after_seq, limit } = request.query;
 
-        const session = await db.session.findFirst({
-            where: {
-                id: sessionId,
-                accountId: userId
-            },
-            select: { id: true }
-        });
+        // Validate session ownership and fetch messages in parallel.
+        // Archived sessions have no messages (deleted by archiver), return 404 early.
+        const [session, messages] = await Promise.all([
+            db.session.findFirst({
+                where: { id: sessionId, accountId: userId, archived: false },
+                select: { id: true }
+            }),
+            db.sessionMessage.findMany({
+                where: { sessionId, seq: { gt: after_seq } },
+                orderBy: { seq: 'asc' },
+                take: limit + 1,
+                select: {
+                    id: true,
+                    seq: true,
+                    content: true,
+                    localId: true,
+                    createdAt: true,
+                    updatedAt: true
+                }
+            })
+        ]);
 
         if (!session) {
             return reply.code(404).send({ error: 'Session not found' });
         }
-
-        const messages = await db.sessionMessage.findMany({
-            where: {
-                sessionId,
-                seq: { gt: after_seq }
-            },
-            orderBy: { seq: 'asc' },
-            take: limit + 1,
-            select: {
-                id: true,
-                seq: true,
-                content: true,
-                localId: true,
-                createdAt: true,
-                updatedAt: true
-            }
-        });
 
         const hasMore = messages.length > limit;
         const page = hasMore ? messages.slice(0, limit) : messages;
@@ -193,19 +190,17 @@ export function v3SessionRoutes(app: Fastify) {
             };
         });
 
-        for (const message of txResult.createdMessages) {
-            const content = message.localId ? contentByLocalId.get(message.localId) : null;
-            if (!content) {
-                continue;
-            }
-            const updSeq = await allocateUserSeq(userId);
+        const messagesToEmit = txResult.createdMessages.filter(
+            m => m.localId && contentByLocalId.has(m.localId)
+        );
+        const userSeqs = await allocateUserSeqBatch(userId, messagesToEmit.length);
+        for (let i = 0; i < messagesToEmit.length; i++) {
+            const message = messagesToEmit[i];
+            const content = contentByLocalId.get(message.localId!)!;
             const updatePayload = buildNewMessageUpdate({
                 ...message,
-                content: {
-                    t: 'encrypted',
-                    c: content
-                }
-            }, sessionId, updSeq, randomKeyNaked(12));
+                content: { t: 'encrypted', c: content }
+            }, sessionId, userSeqs[i], randomKeyNaked(12));
 
             eventRouter.emitUpdate({
                 userId,

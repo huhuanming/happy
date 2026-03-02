@@ -27,6 +27,20 @@ export async function allocateSessionSeq(sessionId: string) {
     return seq;
 }
 
+export async function allocateUserSeqBatch(accountId: string, count: number) {
+    if (count <= 0) {
+        return [] as number[];
+    }
+    const user = await db.account.update({
+        where: { id: accountId },
+        select: { seq: true },
+        data: { seq: { increment: count } }
+    });
+    const endSeq = user.seq;
+    const startSeq = endSeq - count + 1;
+    return Array.from({ length: count }, (_, index) => startSeq + index);
+}
+
 export async function allocateSessionSeqBatch(sessionId: string, count: number, tx?: SeqClient) {
     if (count <= 0) {
         return [] as number[];

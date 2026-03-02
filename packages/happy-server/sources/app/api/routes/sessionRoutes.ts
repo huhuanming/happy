@@ -332,12 +332,10 @@ export function sessionRoutes(app: Fastify) {
         const userId = request.userId;
         const { sessionId } = request.params;
 
-        // Verify session belongs to user
+        // Verify session belongs to user; archived sessions have no messages.
         const session = await db.session.findFirst({
-            where: {
-                id: sessionId,
-                accountId: userId
-            }
+            where: { id: sessionId, accountId: userId, archived: false },
+            select: { id: true }
         });
 
         if (!session) {
@@ -346,7 +344,7 @@ export function sessionRoutes(app: Fastify) {
 
         const messages = await db.sessionMessage.findMany({
             where: { sessionId },
-            orderBy: { createdAt: 'desc' },
+            orderBy: { seq: 'desc' },   // uses @@index([sessionId, seq])
             take: 150,
             select: {
                 id: true,

@@ -21,29 +21,18 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                 return;
             }
 
-            // Resolve session
-            const session = await db.session.findUnique({
-                where: { id: sid, accountId: userId }
-            });
-            if (!session) {
-                return;
-            }
-
-            // Check version
-            if (session.metadataVersion !== expectedVersion) {
-                callback({ result: 'version-mismatch', version: session.metadataVersion, metadata: session.metadata });
-                return null;
-            }
-
-            // Update metadata
+            // Try the update directly (saves one DB round-trip on the happy path).
+            // The where clause enforces both ownership and version check atomically.
             const { count } = await db.session.updateMany({
-                where: { id: sid, metadataVersion: expectedVersion },
-                data: {
-                    metadata: metadata,
-                    metadataVersion: expectedVersion + 1
-                }
+                where: { id: sid, accountId: userId, metadataVersion: expectedVersion },
+                data: { metadata, metadataVersion: expectedVersion + 1 }
             });
             if (count === 0) {
+                const session = await db.session.findUnique({
+                    where: { id: sid, accountId: userId },
+                    select: { metadataVersion: true, metadata: true }
+                });
+                if (!session) return;
                 callback({ result: 'version-mismatch', version: session.metadataVersion, metadata: session.metadata });
                 return null;
             }
@@ -83,33 +72,20 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                 return;
             }
 
-            // Resolve session
-            const session = await db.session.findUnique({
-                where: {
-                    id: sid,
-                    accountId: userId
-                }
-            });
-            if (!session) {
-                callback({ result: 'error' });
-                return null;
-            }
-
-            // Check version
-            if (session.agentStateVersion !== expectedVersion) {
-                callback({ result: 'version-mismatch', version: session.agentStateVersion, agentState: session.agentState });
-                return null;
-            }
-
-            // Update agent state
+            // Try the update directly (saves one DB round-trip on the happy path).
             const { count } = await db.session.updateMany({
-                where: { id: sid, agentStateVersion: expectedVersion },
-                data: {
-                    agentState: agentState,
-                    agentStateVersion: expectedVersion + 1
-                }
+                where: { id: sid, accountId: userId, agentStateVersion: expectedVersion },
+                data: { agentState, agentStateVersion: expectedVersion + 1 }
             });
             if (count === 0) {
+                const session = await db.session.findUnique({
+                    where: { id: sid, accountId: userId },
+                    select: { agentStateVersion: true, agentState: true }
+                });
+                if (!session) {
+                    callback({ result: 'error' });
+                    return null;
+                }
                 callback({ result: 'version-mismatch', version: session.agentStateVersion, agentState: session.agentState });
                 return null;
             }
@@ -191,14 +167,28 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
 
                 log({ module: 'websocket' }, `Received message from socket ${socket.id}: sessionId=${sid}, messageLength=${message.length} bytes, connectionType=${connection.connectionType}, connectionSessionId=${connection.connectionType === 'session-scoped' ? connection.sessionId : 'N/A'}`);
 
-                // Resolve session
-                const session = await db.session.findUnique({
-                    where: { id: sid, accountId: userId }
-                });
-                if (!session) {
+                const useLocalId = typeof localId === 'string' ? localId : null;
+
+                // Validate session ownership and check for duplicate message in parallel.
+                // Archived sessions are rejected to avoid writing to dead sessions.
+                const [session, existingMsg] = await Promise.all([
+                    db.session.findUnique({
+                        where: { id: sid, accountId: userId },
+                        select: { id: true, archived: true }
+                    }),
+                    useLocalId
+                        ? db.sessionMessage.findFirst({
+                            where: { sessionId: sid, localId: useLocalId },
+                            select: { id: true }
+                        })
+                        : Promise.resolve(null)
+                ]);
+                if (!session || session.archived) {
                     return;
                 }
-                let useLocalId = typeof localId === 'string' ? localId : null;
+                if (existingMsg) {
+                    return;
+                }
 
                 // Create encrypted message
                 const msgContent: PrismaJson.SessionMessageContent = {
@@ -206,19 +196,11 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                     c: message
                 };
 
-                // Resolve seq
-                const updSeq = await allocateUserSeq(userId);
-                const msgSeq = await allocateSessionSeq(sid);
-
-                // Check if message already exists
-                if (useLocalId) {
-                    const existing = await db.sessionMessage.findFirst({
-                        where: { sessionId: sid, localId: useLocalId }
-                    });
-                    if (existing) {
-                        return { msg: existing, update: null };
-                    }
-                }
+                // Allocate user and session seq in parallel
+                const [updSeq, msgSeq] = await Promise.all([
+                    allocateUserSeq(userId),
+                    allocateSessionSeq(sid)
+                ]);
 
                 // Create message
                 const msg = await db.sessionMessage.create({
@@ -263,7 +245,8 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
 
             // Resolve session
             const session = await db.session.findUnique({
-                where: { id: sid, accountId: userId }
+                where: { id: sid, accountId: userId },
+                select: { id: true }
             });
             if (!session) {
                 return;
